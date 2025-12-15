@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "build:web": "expo export --platform web",
     "predeploy": "npm run build:web",
-    "deploy": "gh-pages -d dist -t true"
+    "deploy": "gh-pages -d dist"
   },
   "homepage": "https://liukct98.github.io/GymTracker",
   "dependencies": {
