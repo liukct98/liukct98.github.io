@@ -12,6 +12,8 @@ import Storage from '../services/storage';
 import { SupabaseStorage } from '../services/supabaseStorage';
 import colors from '../utils/colors';
 import { getWorkoutsByDate } from '../utils/stats';
+import { format, getDaysInMonth, startOfWeek, addDays, isSameDay, isSameMonth } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 const CalendarScreen = ({ navigation }) => {
   const [workouts, setWorkouts] = useState([]);
@@ -32,14 +34,6 @@ const CalendarScreen = ({ navigation }) => {
     setWorkouts(data);
   };
 
-  const getDaysInMonth = (year, month) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
-  const getFirstDayOfMonth = (year, month) => {
-    return new Date(year, month, 1).getDay();
-  };
-
   const previousMonth = () => {
     setCurrentDate(
       new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
@@ -52,18 +46,29 @@ const CalendarScreen = ({ navigation }) => {
     );
   };
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const daysInMonth = getDaysInMonth(year, month);
-  const firstDay = getFirstDayOfMonth(year, month);
-
-  const calendarDays = [];
-  for (let i = 0; i < firstDay; i++) {
-    calendarDays.push(null);
+const year = currentDate.getFullYear();
+const month = currentDate.getMonth();
+// Nuova logica: genera la matrice delle settimane per il mese corrente con date-fns
+const generateCalendarMatrix = (date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const daysInMonth = getDaysInMonth(date);
+  const firstOfMonth = new Date(year, month, 1);
+  const startDate = startOfWeek(firstOfMonth, { weekStartsOn: 1, locale: it });
+  const weeks = [];
+  let day = startDate;
+  while (true) {
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      week.push(day);
+      day = addDays(day, 1);
+    }
+    weeks.push(week);
+    if (!isSameMonth(day, firstOfMonth) && day.getDate() === 1) break;
   }
-  for (let day = 1; day <= daysInMonth; day++) {
-    calendarDays.push(day);
-  }
+  return weeks;
+};
+const weeks = generateCalendarMatrix(currentDate);
 
   const monthNames = [
     'Gennaio',
@@ -80,7 +85,7 @@ const CalendarScreen = ({ navigation }) => {
     'Dicembre',
   ];
 
-  const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+  const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
   const getWorkoutsForDay = (day) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -115,54 +120,60 @@ const CalendarScreen = ({ navigation }) => {
 
       <ScrollView style={styles.calendarContainer}>
         <View style={styles.calendarGrid}>
-          {calendarDays.map((day, index) => {
-            if (!day) {
-              return <View key={`empty-${index}`} style={styles.calendarDay} />;
-            }
-
-            const dayWorkouts = getWorkoutsForDay(day);
-            const hasWorkouts = dayWorkouts.length > 0;
-            const isToday =
-              day === new Date().getDate() &&
-              month === new Date().getMonth() &&
-              year === new Date().getFullYear();
-
-            return (
-              <TouchableOpacity
-                key={day}
-                style={[
-                  styles.calendarDay,
-                  isToday && styles.calendarDayToday,
-                  hasWorkouts && styles.calendarDayWithWorkout,
-                ]}
-                onPress={() => {
-                  if (hasWorkouts) {
-                    // Navigate to workout detail if only one workout
-                    if (dayWorkouts.length === 1) {
-                      navigation.navigate('WorkoutDetail', {
-                        workout: dayWorkouts[0],
-                      });
-                    }
-                  }
-                }}
-              >
-                <Text
-                  style={[
-                    styles.calendarDayText,
-                    isToday && styles.calendarDayTextToday,
-                    hasWorkouts && styles.calendarDayTextWithWorkout,
-                  ]}
-                >
-                  {day}
-                </Text>
-                {hasWorkouts && (
-                  <View style={styles.workoutIndicator}>
-                    <Text style={styles.workoutCount}>{dayWorkouts.length}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+          {weeks.map((week, weekIdx) => (
+            <View key={weekIdx} style={{ flexDirection: 'row' }}>
+              {week.map((dateObj, dayIdx) => {
+                const isCurrentMonth = dateObj.getMonth() === month;
+                const day = dateObj.getDate();
+                const today = new Date();
+                const isToday =
+                  dateObj.getDate() === today.getDate() &&
+                  dateObj.getMonth() === today.getMonth() &&
+                  dateObj.getFullYear() === today.getFullYear();
+                const dayWorkouts = getWorkoutsByDate(
+                  workouts,
+                  `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`
+                );
+                const hasWorkouts = dayWorkouts.length > 0;
+                return (
+                  <TouchableOpacity
+                    key={`${weekIdx}-${dayIdx}`}
+                    style={[
+                      styles.calendarDay,
+                      !isCurrentMonth && { opacity: 0.3 },
+                      isToday && styles.calendarDayToday,
+                      hasWorkouts && styles.calendarDayWithWorkout,
+                    ]}
+                    onPress={() => {
+                      if (hasWorkouts) {
+                        if (dayWorkouts.length === 1) {
+                          navigation.navigate('WorkoutDetail', {
+                            workout: dayWorkouts[0],
+                          });
+                        }
+                      }
+                    }}
+                    disabled={!isCurrentMonth}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        isToday && styles.calendarDayTextToday,
+                        hasWorkouts && styles.calendarDayTextWithWorkout,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                    {hasWorkouts && (
+                      <View style={styles.workoutIndicator}>
+                        <Text style={styles.workoutCount}>{dayWorkouts.length}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
         </View>
 
         <View style={styles.legend}>
@@ -216,18 +227,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     padding: 8,
   },
   calendarDay: {
-    width: '14.28%',
+    flex: 1,
     aspectRatio: 1,
     padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
     margin: 2,
+    minWidth: 0, // per evitare overflow
   },
   calendarDayToday: {
     backgroundColor: colors.primary,
