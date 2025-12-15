@@ -55,7 +55,7 @@ export const SharingService = {
           id: newWorkout.id,
           user_id: user.id,
           name: newWorkout.name,
-          date: newWorkout.date,
+          // date: newWorkout.date, // RIMOSSO: la colonna non esiste su Supabase
           notes: newWorkout.notes,
           exercises: newWorkout.exercises,
           created_at: newWorkout.createdAt,

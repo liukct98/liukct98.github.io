@@ -49,11 +49,28 @@ export const AuthProvider = ({ children }) => {
       
       if (session?.user) {
         // Carica username dal profilo
-        const { data: profile } = await supabase
+        let { data: profile } = await supabase
           .from('profiles')
           .select('username')
           .eq('id', session.user.id)
           .single();
+
+        // Se il profilo non esiste, crealo ora
+        if (!profile) {
+          console.log('Tentativo di creazione profilo per user:', session.user.id);
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              username: session.user.email.split('@')[0],
+            });
+          if (profileError) {
+            console.error('Error creating profile at login:', profileError);
+          } else {
+            profile = { username: session.user.email.split('@')[0] };
+            console.log('Profilo creato con successo!');
+          }
+        }
 
         const userData = {
           id: session.user.id,
@@ -163,17 +180,19 @@ export const AuthProvider = ({ children }) => {
 
       if (error) throw error;
 
-      // Crea il profilo con lo username
+      // Crea il profilo con lo username SUBITO dopo la registrazione
       if (data.user) {
+        // Prova a creare il profilo, logga eventuali errori di RLS
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: data.user.id,
             username: username,
           });
-
         if (profileError) {
-          console.error('Error creating profile:', profileError);
+          console.error('Error creating profile at registration:', profileError);
+        } else {
+          console.log('Profilo creato subito dopo la registrazione!');
         }
       }
 

@@ -84,12 +84,15 @@ export const SupabaseStorage = {
       if (error) throw error;
 
       console.log('[SupabaseStorage] Loaded from cloud:', data?.length || 0, 'templates');
+      if (data && data.length > 0) {
+        console.log('[SupabaseStorage] Primo template dal cloud:', JSON.stringify(data[0], null, 2));
+      }
 
       const templates = data.map((w) => ({
         id: w.id,
         name: w.name,
         notes: w.notes,
-        exercises: w.exercises,
+        exercises: typeof w.exercises === 'string' ? (() => { try { return JSON.parse(w.exercises); } catch { return []; } })() : w.exercises,
         createdAt: w.created_at,
       }));
 
@@ -203,6 +206,18 @@ export const SupabaseStorage = {
       console.error('[SupabaseStorage] Error loading exercises:', error);
       return { success: false, error };
     }
+  },
+
+  async deleteWorkout(id) {
+    console.log('[SupabaseStorage] INIZIO deleteWorkout:', id);
+    const user = await this.getCurrentUser();
+    if (!user) return { error: 'No user' };
+    console.log('[SupabaseStorage] DELETE workout id:', id, 'user_id:', user.id);
+    const { error } = await supabase
+      .from('workouts')
+      .delete()
+      .eq('id', id);
+    return { error };
   },
 
   async fullSync() {

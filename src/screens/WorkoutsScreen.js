@@ -28,7 +28,12 @@ const WorkoutsScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
 
   useEffect(() => {
-    loadWorkouts();
+    // Carica i workout dal cloud e poi dal local storage
+    const fetchAndLoad = async () => {
+      await SupabaseStorage.loadTemplates();
+      await loadWorkouts();
+    };
+    fetchAndLoad();
   }, []);
 
   useFocusEffect(
@@ -52,23 +57,18 @@ const WorkoutsScreen = ({ navigation }) => {
   };
 
   const deleteWorkout = async (id) => {
-    Alert.alert(
-      'Elimina Template',
-      'Sei sicuro di voler eliminare questo template di allenamento?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: async () => {
-            // Elimina dal local storage
-            const updated = workouts.filter((w) => w.id !== id);
-            await Storage.saveTemplates(updated);
-            setWorkouts(updated);
-          },
-        },
-      ]
-    );
+    console.log('[DEBUG] deleteWorkout chiamata con id:', id);
+    // DEBUG: chiama direttamente SupabaseStorage.deleteWorkout senza Alert
+    try {
+      const { error } = await SupabaseStorage.deleteWorkout(id);
+      if (error) {
+        console.error('Errore eliminazione workout:', error);
+        return;
+      }
+      setWorkouts((prev) => prev.filter((w) => w.id !== id));
+    } catch (e) {
+      console.error('Errore eliminazione workout:', e);
+    }
   };
 
   const handleLogout = () => {
@@ -93,8 +93,10 @@ const WorkoutsScreen = ({ navigation }) => {
     }
 
     const result = await SharingService.importWorkout(shareCode.trim());
-    
+
     if (result.success) {
+      // Aggiorna i templates dal cloud così la home si aggiorna subito
+      await SupabaseStorage.loadTemplates();
       setImportModalVisible(false);
       setShareCode('');
       Alert.alert(
@@ -133,7 +135,10 @@ const WorkoutsScreen = ({ navigation }) => {
           </View>
           <TouchableOpacity
             style={styles.deleteButton}
-            onPress={() => deleteWorkout(item.id)}
+            onPress={() => {
+              console.log('[DEBUG] Cliccato cestino workout id:', item.id);
+              deleteWorkout(item.id);
+            }}
           >
             <Ionicons name="trash-outline" size={20} color={colors.danger} />
           </TouchableOpacity>

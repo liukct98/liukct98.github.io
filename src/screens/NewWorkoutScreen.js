@@ -107,9 +107,25 @@ const NewWorkoutScreen = ({ navigation }) => {
       createdAt: new Date().toISOString(),
     };
 
+
     const templates = await Storage.getTemplates();
     const updated = [newWorkout, ...templates];
+    // Salva il nuovo workout in Storage locale
     await Storage.saveTemplates(updated);
+
+    // Controlla se l'utente è loggato prima di salvare su Supabase
+    const user = await Storage.getCurrentUser();
+    if (!user) {
+      Alert.alert('Devi essere loggato', 'Effettua il login per salvare l\'allenamento sul cloud. Verrà salvato solo in locale.');
+      return;
+    }
+
+    // Salva anche su Supabase
+    try {
+      await SupabaseStorage.syncTemplates();
+    } catch (e) {
+      console.error('Errore sync su Supabase:', e);
+    }
 
     Alert.alert('Successo', 'Template salvato!', [
       {
@@ -136,7 +152,11 @@ const NewWorkoutScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ flexGrow: 1 }}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.form}>
         <View style={styles.formGroup}>
           <Text style={styles.label}>Nome Allenamento</Text>
@@ -296,6 +316,7 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 16,
+    paddingBottom: 64, // spazio extra per la tastiera
   },
   formGroup: {
     marginBottom: 16,
