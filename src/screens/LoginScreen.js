@@ -20,7 +20,10 @@ const LoginScreen = () => {
   const { login, register } = useAuth();
 
   const handleSubmit = async () => {
+    console.log('handleSubmit called', { email, password, isRegister });
+    
     if (!email || !password) {
+      console.log('Missing email or password');
       Alert.alert('Errore', 'Inserisci email e password');
       return;
     }
@@ -30,7 +33,9 @@ const LoginScreen = () => {
         Alert.alert('Errore', 'Inserisci un username');
         return;
       }
+      console.log('Calling register...');
       const result = await register(email, password, username);
+      console.log('Register result:', result);
       if (result.success) {
         Alert.alert('Successo', result.message);
         setIsRegister(false);
@@ -39,7 +44,9 @@ const LoginScreen = () => {
         Alert.alert('Errore', result.error);
       }
     } else {
+      console.log('Calling login...');
       const result = await login(email, password);
+      console.log('Login result:', result);
       if (!result.success) {
         Alert.alert('Errore', result.error);
       }

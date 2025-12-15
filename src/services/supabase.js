@@ -12,12 +12,29 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 export const ADMIN_EMAILS = ['lca.valenti@gmail.com'];
 
-// Use localStorage on web, AsyncStorage on native
-const storage = Platform.OS === 'web' ? window.localStorage : AsyncStorage;
+// Create storage adapter that works on both web and native
+const storageAdapter = Platform.OS === 'web' 
+  ? {
+      getItem: (key) => {
+        console.log('[Supabase Storage] getItem:', key);
+        return Promise.resolve(window.localStorage.getItem(key));
+      },
+      setItem: (key, value) => {
+        console.log('[Supabase Storage] setItem:', key);
+        window.localStorage.setItem(key, value);
+        return Promise.resolve();
+      },
+      removeItem: (key) => {
+        console.log('[Supabase Storage] removeItem:', key);
+        window.localStorage.removeItem(key);
+        return Promise.resolve();
+      },
+    }
+  : AsyncStorage;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: storage,
+    storage: storageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',

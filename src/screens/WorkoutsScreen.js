@@ -72,10 +72,18 @@ const WorkoutsScreen = ({ navigation }) => {
   };
 
   const handleLogout = () => {
-    Alert.alert('Esci', 'Sei sicuro di voler uscire?', [
-      { text: 'Annulla', style: 'cancel' },
-      { text: 'Esci', style: 'destructive', onPress: logout },
-    ]);
+    if (typeof window !== 'undefined' && window.confirm) {
+      // Web: usa window.confirm
+      if (window.confirm('Sei sicuro di voler uscire?')) {
+        logout();
+      }
+    } else {
+      // Mobile: usa Alert
+      Alert.alert('Esci', 'Sei sicuro di voler uscire?', [
+        { text: 'Annulla', style: 'cancel' },
+        { text: 'Esci', style: 'destructive', onPress: logout },
+      ]);
+    }
   };
 
   const handleImport = async () => {
