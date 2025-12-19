@@ -10,7 +10,7 @@ if (Platform.OS !== 'web') {
 const SUPABASE_URL = 'https://wqrbcfanfasbceiqmubq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxcmJjZmFuZmFzYmNlaXFtdWJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NDY0MDMsImV4cCI6MjA4MDQyMjQwM30.DTBb_4NJSTNkFLysLDSvMVL90FaJFQG3f3v1ULPAjlk';
 
-export const ADMIN_EMAILS = ['lca.valenti@gmail.com'];
+export const ADMIN_EMAILS = ['liukct@gmail.com'];
 
 // Create storage adapter that works on both web and native
 const storageAdapter = Platform.OS === 'web' 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,11 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   const [workoutInProgress, setWorkoutInProgress] = useState(false);
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState({ exIndex: null, setIndex: null, field: null });
+  const [editingValue, setEditingValue] = useState('');
+  const setRowRefs = useRef({});
+  const exerciseCardRefs = useRef({});
 
   // Aggiorna il workout quando arrivano nuovi params
   useEffect(() => {
@@ -44,14 +50,13 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     };
   }, [workoutInProgress, workoutStartTime]);
 
+  // Segna la serie come completata e fa partire il timer
   const toggleSetCompleted = async (exIndex, setIndex) => {
     const updatedWorkout = { ...workout };
     const set = updatedWorkout.exercises[exIndex].sets[setIndex];
     set.completed = !set.completed;
-    
-    setWorkout(updatedWorkout);
-    
-    // Non salvare lo stato per i template, solo per i workout nel calendario
+    setWorkout({ ...updatedWorkout });
+    // Salva nel calendario se completato, altrimenti aggiorna il template
     if (workout.completedAt) {
       const calendar = await Storage.getCalendar();
       const index = calendar.findIndex((w) => w.id === workout.id);
@@ -60,12 +65,86 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
         await Storage.saveCalendar(calendar);
         await SupabaseStorage.syncCalendar();
       }
+    } else {
+      // Aggiorna il template locale
+      const templates = await Storage.getTemplates();
+      const idx = templates.findIndex((t) => t.id === workout.id);
+      if (idx !== -1) {
+        templates[idx] = updatedWorkout;
+        await Storage.saveTemplates(templates);
+      }
     }
-
-    // Start timer if completed and has rest time
+    // Timer
     if (set.completed) {
       const restTime = set.rest && set.rest > 0 ? set.rest : 90;
       setCurrentTimer(restTime);
+    }
+  };
+
+  // Start inline editing
+  const startInlineEdit = (exIndex, setIndex, field, value) => {
+    setEditingCell({ exIndex, setIndex, field });
+    setEditingValue(value?.toString() || '');
+  };
+
+  // Save inline edit
+  const saveInlineEdit = async () => {
+    const { exIndex, setIndex, field } = editingCell;
+    if (exIndex === null || setIndex === null || !field) return;
+    const updatedWorkout = { ...workout };
+    const set = updatedWorkout.exercises[exIndex].sets[setIndex];
+    if (field === 'reps') set.reps = parseInt(editingValue) || 0;
+    if (field === 'weight') set.weight = parseFloat(editingValue) || 0;
+    if (field === 'time') set.time = parseInt(editingValue) || 0;
+    setWorkout({ ...updatedWorkout });
+    setEditingCell({ exIndex: null, setIndex: null, field: null });
+    setEditingValue('');
+    // Salva nel calendario se completato, altrimenti aggiorna il template
+    if (workout.completedAt) {
+      const calendar = await Storage.getCalendar();
+      const index = calendar.findIndex((w) => w.id === workout.id);
+      if (index !== -1) {
+        calendar[index] = updatedWorkout;
+        await Storage.saveCalendar(calendar);
+        await SupabaseStorage.syncCalendar();
+      }
+    } else {
+      // Aggiorna il template locale
+      const templates = await Storage.getTemplates();
+      const idx = templates.findIndex((t) => t.id === workout.id);
+      if (idx !== -1) {
+        templates[idx] = updatedWorkout;
+        await Storage.saveTemplates(templates);
+      }
+    }
+  };
+
+  // Salva la modifica della serie
+  const saveEditSet = async () => {
+    const { exIndex, setIndex, reps, weight } = editSetModal;
+    const updatedWorkout = { ...workout };
+    const set = updatedWorkout.exercises[exIndex].sets[setIndex];
+    set.reps = parseInt(reps) || 0;
+    set.weight = parseFloat(weight) || 0;
+    setWorkout({ ...updatedWorkout });
+    setEditSetModal({ ...editSetModal, visible: false });
+    // Salva nel calendario se completato, altrimenti aggiorna il template
+    if (workout.completedAt) {
+      const calendar = await Storage.getCalendar();
+      const index = calendar.findIndex((w) => w.id === workout.id);
+      if (index !== -1) {
+        calendar[index] = updatedWorkout;
+        await Storage.saveCalendar(calendar);
+        await SupabaseStorage.syncCalendar();
+      }
+    } else {
+      // Aggiorna il template locale
+      const templates = await Storage.getTemplates();
+      const idx = templates.findIndex((t) => t.id === workout.id);
+      if (idx !== -1) {
+        templates[idx] = updatedWorkout;
+        await Storage.saveTemplates(templates);
+      }
     }
   };
 
@@ -188,7 +267,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
         </View>
       </View>
 
-      {currentTimer && (
+     {typeof currentTimer === 'number' && (
         <View style={styles.timerContainer}>
           <Timer
             initialSeconds={currentTimer}
@@ -202,55 +281,122 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
         {workout.exercises.map((exercise, exIndex) => {
           const exVolume = calculateVolume([exercise]);
           return (
-            <View key={exIndex} style={styles.exerciseCard}>
+            <View
+              key={exIndex}
+              style={styles.exerciseCard}
+              ref={ref => { if (ref) exerciseCardRefs.current[exIndex] = ref; }}
+            >
               <View style={styles.exerciseHeader}>
-                <View>
-                  <Text style={styles.exerciseName}>{exercise.exerciseName}</Text>
-                  {exercise.exerciseNotes && (
-                    <Text style={styles.exerciseNotes}>{exercise.exerciseNotes}</Text>
-                  )}
-                </View>
-                <Text style={styles.exerciseVolume}>{exVolume} kg</Text>
+                <Text style={styles.exerciseName}>
+                  {String(exercise.exerciseName)}
+                </Text>
+
+                <Text style={styles.exerciseVolume}>
+                  {Number(exVolume) || 0} kg
+                </Text>
               </View>
 
               <View style={styles.setsContainer}>
                 <View style={styles.setsHeader}>
-                  <Text style={styles.setsHeaderText}>Serie</Text>
-                  <Text style={styles.setsHeaderText}>Reps</Text>
-                  <Text style={styles.setsHeaderText}>Peso</Text>
-                  <Text style={styles.setsHeaderText}>Volume</Text>
+                  <Text style={styles.setsHeaderText}>{'Serie'}</Text>
+                  <Text style={styles.setsHeaderText}>{'Reps'}</Text>
+                  <Text style={styles.setsHeaderText}>{'Peso'}</Text>
+                  <Text style={styles.setsHeaderText}>{'Tempo (s)'}</Text>
                 </View>
-                {exercise.sets.map((set, setIndex) => (
-                  <TouchableOpacity
-                    key={setIndex}
-                    style={[
-                      styles.setRow,
-                      set.completed && styles.setRowCompleted,
-                    ]}
-                    onPress={() => toggleSetCompleted(exIndex, setIndex)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.setCell}>
-                      {set.completed ? (
-                        <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                {exercise.sets.map((set, setIndex) => {
+                  const key = `${exIndex}-${setIndex}`;
+                  return (
+                    <View
+                      key={setIndex}
+                      style={[styles.setRow, set.completed && styles.setRowCompleted]}
+                      ref={ref => { if (ref) setRowRefs.current[key] = ref; }}
+                    >
+                      {/* Checkbox numerata */}
+                      <TouchableOpacity
+                        style={styles.setCell}
+                        onPress={() => toggleSetCompleted(exIndex, setIndex)}
+                        activeOpacity={0.7}
+                      >
+                        {set.completed ? (
+                          <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                        ) : (
+                          <View style={styles.setNumber}>
+                            <Text style={styles.setNumberText}>{setIndex + 1}</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                      {/* Inline editable reps */}
+                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'reps' ? (
+                        <TextInput
+                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
+                          value={editingValue}
+                          onChangeText={setEditingValue}
+                          keyboardType="numeric"
+                          autoFocus
+                          onBlur={saveInlineEdit}
+                          onSubmitEditing={saveInlineEdit}
+                          returnKeyType="done"
+                        />
                       ) : (
-                        <View style={styles.setNumber}>
-                          <Text style={styles.setNumberText}>{setIndex + 1}</Text>
-                        </View>
+                        <TouchableOpacity
+                          style={[styles.setCell, styles.setCellText]}
+                          onPress={() => startInlineEdit(exIndex, setIndex, 'reps', set.reps)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.setCellText}>{set.reps !== undefined && set.reps !== null ? String(set.reps) : ''}</Text>
+                        </TouchableOpacity>
+                      )}
+                      {/* Inline editable weight */}
+                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'weight' ? (
+                        <TextInput
+                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
+                          value={editingValue}
+                          onChangeText={setEditingValue}
+                          keyboardType="decimal-pad"
+                          autoFocus
+                          onBlur={saveInlineEdit}
+                          onSubmitEditing={saveInlineEdit}
+                          returnKeyType="done"
+                        />
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.setCell, styles.setCellText]}
+                          onPress={() => startInlineEdit(exIndex, setIndex, 'weight', set.weight)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.setCellText}>{set.weight !== undefined && set.weight !== null ? String(set.weight) + ' kg' : ''}</Text>
+                        </TouchableOpacity>
+                      )}
+                      {/* Inline editable time */}
+                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'time' ? (
+                        <TextInput
+                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
+                          value={editingValue}
+                          onChangeText={setEditingValue}
+                          keyboardType="numeric"
+                          autoFocus
+                          onBlur={saveInlineEdit}
+                          onSubmitEditing={saveInlineEdit}
+                          returnKeyType="done"
+                        />
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.setCell, styles.setCellText]}
+                          onPress={() => startInlineEdit(exIndex, setIndex, 'time', set.time)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.setCellText}>{set.time !== undefined && set.time !== null ? String(set.time) : '-'}</Text>
+                        </TouchableOpacity>
                       )}
                     </View>
-                    <Text style={[styles.setCell, styles.setCellText]}>{set.reps}</Text>
-                    <Text style={[styles.setCell, styles.setCellText]}>{set.weight} kg</Text>
-                    <Text style={[styles.setCell, styles.setCellText]}>
-                      {set.completed ? set.reps * set.weight : '-'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                  );
+                })}
               </View>
             </View>
           );
         })}
       </View>
+            {/* No modal: inline editing only */}
       </ScrollView>
 
       {/* Footer compatto */}

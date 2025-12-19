@@ -234,29 +234,38 @@ const NewWorkoutScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.pickerContainer}>
+                <View style={[styles.pickerContainer, { backgroundColor: '#fff', borderColor: colors.primary, borderWidth: 1.5, borderRadius: 8 }]}> 
                   <Picker
                     selectedValue={exercise.exerciseId}
                     onValueChange={(value) => updateExercise(exIndex, 'exerciseId', value)}
-                    style={styles.picker}
-                    dropdownIconColor={colors.text}
+                    style={[styles.picker, { color: '#222', backgroundColor: '#fff', fontWeight: 'bold' }]}
+                    dropdownIconColor={colors.primary}
                   >
                     {availableExercises.map((ex) => (
                       <Picker.Item
                         key={ex.id}
                         label={`${ex.name}${ex.notes ? ' - ' + ex.notes : ''}`}
                         value={ex.id}
+                        color="#222"
                       />
                     ))}
                   </Picker>
                 </View>
 
+                {/* Header serie */}
+                <View style={[styles.setRow, { backgroundColor: 'transparent', marginBottom: 0 }]}> 
+                  <Text style={[styles.setHeaderCell, { width: 60 }]}>Serie</Text>
+                  <Text style={styles.setHeaderCell}>Reps</Text>
+                  <Text style={styles.setHeaderCell}>Kg</Text>
+                  <Text style={styles.setHeaderCell}>Sec</Text>
+                  <Text style={[styles.setHeaderCell, { width: 32 }]}></Text>
+                </View>
                 {exercise.sets.map((set, setIndex) => (
                   <View key={setIndex} style={styles.setRow}>
-                    <Text style={styles.setLabel}>Serie {setIndex + 1}</Text>
+                    <Text style={styles.setLabel}>{setIndex + 1}</Text>
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Reps"
+                      placeholder="-"
                       placeholderTextColor={colors.textSecondary}
                       value={set.reps > 0 ? set.reps.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'reps', value)}
@@ -264,7 +273,7 @@ const NewWorkoutScreen = ({ navigation }) => {
                     />
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Kg"
+                      placeholder="-"
                       placeholderTextColor={colors.textSecondary}
                       value={set.weight > 0 ? set.weight.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'weight', value)}
@@ -272,7 +281,7 @@ const NewWorkoutScreen = ({ navigation }) => {
                     />
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Sec"
+                      placeholder="-"
                       placeholderTextColor={colors.textSecondary}
                       value={set.rest > 0 ? set.rest.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'rest', value)}
@@ -408,20 +417,35 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  setHeaderCell: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontWeight: 'bold',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
   setLabel: {
     color: colors.text,
     fontSize: 14,
     width: 60,
+    textAlign: 'center',
+    fontWeight: 'bold',
   },
   setInput: {
     flex: 1,
+    minWidth: 48,
+    maxWidth: 64,
     backgroundColor: colors.surfaceLight,
-    borderRadius: 6,
-    padding: 10,
-    fontSize: 14,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    fontSize: 15,
     color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    textAlign: 'center',
+    marginHorizontal: 2,
   },
   removeSetButton: {
     padding: 4,

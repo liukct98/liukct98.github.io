@@ -18,6 +18,13 @@ import Storage from '../services/storage';
 import SupabaseStorage from '../services/supabaseStorage';
 
 const ExercisesScreen = () => {
+    const [user, setUser] = useState(null);
+    useEffect(() => {
+      (async () => {
+        const u = await Storage.getCurrentUser();
+        setUser(u);
+      })();
+    }, []);
   const [exercises, setExercises] = useState([]);
   const [filteredExercises, setFilteredExercises] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('Tutte');
@@ -25,7 +32,7 @@ const ExercisesScreen = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newExercise, setNewExercise] = useState({
     name: '',
-    category: 'Petto',
+    category: 'Addominali',
     notes: '',
   });
   const [refreshing, setRefreshing] = useState(false);
@@ -33,12 +40,16 @@ const ExercisesScreen = () => {
   const categories = [
     'Tutte',
     'Petto',
-    'Schiena',
+    'Dorso',
     'Spalle',
     'Bicipiti',
     'Tricipiti',
     'Gambe',
-    'Core',
+    'Cardio',
+    'Addominali',
+    'Glutei',
+    'Lombari',
+    'Polpacci',
   ];
 
   useFocusEffect(
@@ -50,19 +61,13 @@ const ExercisesScreen = () => {
 
   const loadExercises = async () => {
     try {
-      console.log('Loading exercises from storage...');
-      const stored = await Storage.getExercises();
-      console.log('Exercises loaded:', stored ? stored.length : 0);
-      if (stored && stored.length > 0) {
-        // Log unique categories
-        const categories = [...new Set(stored.map(e => e.category))];
-        console.log('[ExercisesScreen] Available categories:', categories);
-        console.log('[ExercisesScreen] Sample exercises:', stored.slice(0, 3).map(e => ({ name: e.name, category: e.category })));
-        
-        setExercises(stored);
-        filterExercises(stored, selectedCategory, searchQuery);
+      console.log('Loading exercises from Supabase...');
+      const { data, error } = await SupabaseStorage.loadExercises();
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setExercises(data);
+        filterExercises(data, selectedCategory, searchQuery);
       } else {
-        console.log('No exercises found in storage');
         setExercises([]);
         setFilteredExercises([]);
       }
@@ -128,9 +133,8 @@ const ExercisesScreen = () => {
       };
 
       const updated = [...exercises, exercise];
-      await Storage.saveExercises(updated);
       await SupabaseStorage.syncExercises();
-      setExercises(updated);
+      await loadExercises();
       setShowAddModal(false);
       setNewExercise({ name: '', category: 'Petto', notes: '' });
       Alert.alert('Successo', 'Esercizio aggiunto con successo!');
@@ -152,9 +156,8 @@ const ExercisesScreen = () => {
           onPress: async () => {
             try {
               const updated = exercises.filter((ex) => ex.id !== exerciseId);
-              await Storage.saveExercises(updated);
               await SupabaseStorage.syncExercises();
-              setExercises(updated);
+              await loadExercises();
               Alert.alert('Successo', 'Esercizio eliminato');
             } catch (error) {
               console.error('Error deleting exercise:', error);
@@ -381,15 +384,17 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   categoryList: {
-    maxHeight: 50,
+    mraxHeight: 40,
+    minHeight: 40,
     marginBottom: 8,
   },
   categoryListContent: {
     paddingHorizontal: 16,
+    alignItems: 'center',
   },
   categoryChip: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 20,
     backgroundColor: colors.surface,
     marginRight: 8,

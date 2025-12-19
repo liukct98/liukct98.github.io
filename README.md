@@ -135,7 +135,7 @@ const SUPABASE_ANON_KEY = 'your-anon-key';
 Email amministratore configurata in `src/services/supabase.js`:
 
 ```javascript
-export const ADMIN_EMAILS = ['lca.valenti@gmail.com'];
+export const ADMIN_EMAILS = ['liukct@gmail.com'];
 ```
 
 ## 📱 Build per Produzione

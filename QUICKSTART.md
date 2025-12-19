@@ -25,7 +25,7 @@ Usa le stesse credenziali dell'app web o registra un nuovo account.
 ✅ Template Allenamenti
 ✅ Statistiche e Volume tracking
 ✅ Sincronizzazione Cloud + Storage locale
-✅ Sistema Admin (lca.valenti@gmail.com)
+✅ Sistema Admin (liukct@gmail.com)
 
 ## Differenze rispetto all'app Web
 
