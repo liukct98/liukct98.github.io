@@ -109,12 +109,26 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
         await SupabaseStorage.syncCalendar();
       }
     } else {
-      // Aggiorna il template locale
+      // Aggiorna il template locale con i nuovi valori ma resetta completed
       const templates = await Storage.getTemplates();
       const idx = templates.findIndex((t) => t.id === workout.id);
       if (idx !== -1) {
-        templates[idx] = updatedWorkout;
+        const templateToSave = {
+          ...updatedWorkout,
+          exercises: updatedWorkout.exercises.map((ex) => ({
+            ...ex,
+            sets: ex.sets.map((s) => ({
+              reps: s.reps,
+              weight: s.weight,
+              rest: s.rest,
+              time: s.time,
+              completed: false,
+            })),
+          })),
+        };
+        templates[idx] = templateToSave;
         await Storage.saveTemplates(templates);
+        await SupabaseStorage.syncTemplates();
       }
     }
   };
@@ -191,6 +205,29 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     const calendar = await Storage.getCalendar();
     await Storage.saveCalendar([completedWorkout, ...calendar]);
     await SupabaseStorage.syncCalendar();
+
+    // Aggiorna il template con i nuovi valori (pesi, reps, ecc.) per la prossima volta
+    const templates = await Storage.getTemplates();
+    const templateIndex = templates.findIndex((t) => t.id === workout.id);
+    if (templateIndex !== -1) {
+      // Crea una versione del workout senza completed e senza le info di completamento
+      const updatedTemplate = {
+        ...workout,
+        exercises: workout.exercises.map((ex) => ({
+          ...ex,
+          sets: ex.sets.map((s) => ({
+            reps: s.reps,
+            weight: s.weight,
+            rest: s.rest,
+            time: s.time,
+            completed: false, // Reset completed per la prossima volta
+          })),
+        })),
+      };
+      templates[templateIndex] = updatedTemplate;
+      await Storage.saveTemplates(templates);
+      await SupabaseStorage.syncTemplates();
+    }
 
     setWorkoutInProgress(false);
     setWorkoutStartTime(null);

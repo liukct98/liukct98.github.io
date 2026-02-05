@@ -24,9 +24,10 @@ const EditWorkoutScreen = ({ route, navigation }) => {
     initialWorkout.exercises.map(ex => ({
       exerciseId: ex.exerciseId,
       sets: ex.sets.map(s => ({
-        reps: s.reps,
-        weight: s.weight,
+        reps: s.reps || 0,
+        weight: s.weight || 0,
         rest: s.rest || 90,
+        time: s.time || 0,
       })),
     }))
   );
@@ -98,13 +99,22 @@ const EditWorkoutScreen = ({ route, navigation }) => {
       return;
     }
 
-    const workoutExercises = exercises.map((ex) => {
+    const workoutExercises = exercises.map((ex, exIndex) => {
       const exercise = availableExercises.find((e) => e.id === ex.exerciseId);
+      const originalExercise = initialWorkout.exercises[exIndex];
+      
       return {
         exerciseId: ex.exerciseId,
         exerciseName: exercise.name,
         exerciseNotes: exercise.notes || '',
-        sets: ex.sets.map((s) => ({ ...s, completed: false })),
+        sets: ex.sets.map((s, setIndex) => {
+          // Preserve the completed status from the original workout if it exists
+          const originalSet = originalExercise?.sets[setIndex];
+          return {
+            ...s,
+            completed: originalSet?.completed || false
+          };
+        }),
       };
     });
 
@@ -121,6 +131,7 @@ const EditWorkoutScreen = ({ route, navigation }) => {
     if (index !== -1) {
       templates[index] = updatedWorkout;
       await Storage.saveTemplates(templates);
+      await SupabaseStorage.syncTemplates();
     }
 
     Alert.alert('Successo', 'Allenamento modificato!');
@@ -214,30 +225,41 @@ const EditWorkoutScreen = ({ route, navigation }) => {
                   </Picker>
                 </View>
 
+                {/* Header delle colonne */}
+                {exercise.sets.length > 0 && (
+                  <View style={styles.setHeaderRow}>
+                    <Text style={styles.setHeaderLabel}>Serie</Text>
+                    <Text style={styles.setHeaderText}>Reps</Text>
+                    <Text style={styles.setHeaderText}>Kg</Text>
+                    <Text style={styles.setHeaderText}>Rest</Text>
+                    <View style={styles.setHeaderSpacer} />
+                  </View>
+                )}
+
                 {exercise.sets.map((set, setIndex) => (
                   <View key={setIndex} style={styles.setRow}>
-                    <Text style={styles.setLabel}>Serie {setIndex + 1}</Text>
+                    <Text style={styles.setLabel}>{setIndex + 1}</Text>
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Reps"
+                      placeholder="0"
                       placeholderTextColor={colors.textSecondary}
-                      value={set.reps > 0 ? set.reps.toString() : ''}
+                      value={set.reps !== undefined && set.reps !== null ? set.reps.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'reps', value)}
                       keyboardType="numeric"
                     />
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Kg"
+                      placeholder="0"
                       placeholderTextColor={colors.textSecondary}
-                      value={set.weight > 0 ? set.weight.toString() : ''}
+                      value={set.weight !== undefined && set.weight !== null ? set.weight.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'weight', value)}
                       keyboardType="numeric"
                     />
                     <TextInput
                       style={styles.setInput}
-                      placeholder="Sec"
+                      placeholder="90"
                       placeholderTextColor={colors.textSecondary}
-                      value={set.rest > 0 ? set.rest.toString() : ''}
+                      value={set.rest !== undefined && set.rest !== null ? set.rest.toString() : ''}
                       onChangeText={(value) => updateSet(exIndex, setIndex, 'rest', value)}
                       keyboardType="numeric"
                     />
@@ -362,6 +384,32 @@ const styles = StyleSheet.create({
   removeButton: {
     padding: 8,
   },
+  setHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  setHeaderLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 60,
+    textAlign: 'center',
+  },
+  setHeaderText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  setHeaderSpacer: {
+    width: 28,
+  },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -372,6 +420,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     width: 60,
+    textAlign: 'center',
   },
   setInput: {
     flex: 1,
