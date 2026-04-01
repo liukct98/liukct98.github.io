@@ -6,13 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import Storage from '../services/storage';
 import SupabaseStorage from '../services/supabaseStorage';
 import colors from '../utils/colors';
+import AlertModal from '../components/AlertModal';
 
 const NewWorkoutScreen = ({ navigation }) => {
   const [workoutName, setWorkoutName] = useState('');
@@ -20,6 +20,9 @@ const NewWorkoutScreen = ({ navigation }) => {
   const [exercises, setExercises] = useState([]);
   const [availableExercises, setAvailableExercises] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
 
   useEffect(() => {
     loadData();
@@ -34,7 +37,7 @@ const NewWorkoutScreen = ({ navigation }) => {
 
   const addExercise = () => {
     if (availableExercises.length === 0) {
-      Alert.alert('Errore', 'Crea prima degli esercizi nella sezione Esercizi');
+      showPopup('Errore', 'Crea prima degli esercizi nella sezione Esercizi');
       return;
     }
     setExercises([
@@ -80,12 +83,12 @@ const NewWorkoutScreen = ({ navigation }) => {
 
   const saveWorkout = async () => {
     if (!workoutName.trim()) {
-      Alert.alert('Errore', 'Inserisci un nome per l\'allenamento');
+      showPopup('Errore', "Inserisci un nome per l'allenamento");
       return;
     }
 
     if (exercises.length === 0) {
-      Alert.alert('Errore', 'Aggiungi almeno un esercizio');
+      showPopup('Errore', 'Aggiungi almeno un esercizio');
       return;
     }
 
@@ -116,7 +119,7 @@ const NewWorkoutScreen = ({ navigation }) => {
     // Controlla se l'utente è loggato prima di salvare su Supabase
     const user = await Storage.getCurrentUser();
     if (!user) {
-      Alert.alert('Devi essere loggato', 'Effettua il login per salvare l\'allenamento sul cloud. Verrà salvato solo in locale.');
+      showPopup('Devi essere loggato', "Effettua il login per salvare l'allenamento sul cloud. Verrà salvato solo in locale.");
       return;
     }
 
@@ -127,11 +130,8 @@ const NewWorkoutScreen = ({ navigation }) => {
       console.error('Errore sync su Supabase:', e);
     }
 
-    Alert.alert('Successo', 'Template salvato!', [
-      {
-        text: 'OK',
-        onPress: () => navigation.goBack(),
-      },
+    showPopup('Successo', 'Template salvato!', [
+      { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
 
@@ -222,7 +222,7 @@ const NewWorkoutScreen = ({ navigation }) => {
                     <Text style={styles.exerciseName}>
                       {selectedExercise?.name || 'Seleziona esercizio'}
                     </Text>
-                    {selectedExercise?.notes && (
+                    {!!selectedExercise?.notes && (
                       <Text style={styles.exerciseNotes}>{selectedExercise.notes}</Text>
                     )}
                   </View>
@@ -314,6 +314,7 @@ const NewWorkoutScreen = ({ navigation }) => {
           <Text style={styles.saveButtonText}>Salva Allenamento</Text>
         </TouchableOpacity>
       </View>
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
     </ScrollView>
   );
 };

@@ -7,10 +7,10 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import colors from '../utils/colors';
+import AlertModal from '../components/AlertModal';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -18,37 +18,40 @@ const LoginScreen = () => {
   const [username, setUsername] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const { login, register } = useAuth();
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
 
   const handleSubmit = async () => {
     console.log('handleSubmit called', { email, password, isRegister });
     
     if (!email || !password) {
       console.log('Missing email or password');
-      Alert.alert('Errore', 'Inserisci email e password');
+      showPopup('Errore', 'Inserisci email e password');
       return;
     }
 
     if (isRegister) {
       if (!username) {
-        Alert.alert('Errore', 'Inserisci un username');
+        showPopup('Errore', 'Inserisci un username');
         return;
       }
       console.log('Calling register...');
       const result = await register(email, password, username);
       console.log('Register result:', result);
       if (result.success) {
-        Alert.alert('Successo', result.message);
+        showPopup('Successo', result.message);
         setIsRegister(false);
         setUsername('');
       } else {
-        Alert.alert('Errore', result.error);
+        showPopup('Errore', result.error);
       }
     } else {
       console.log('Calling login...');
       const result = await login(email, password);
       console.log('Login result:', result);
       if (!result.success) {
-        Alert.alert('Errore', result.error);
+        showPopup('Errore', result.error);
       }
     }
   };
@@ -111,6 +114,7 @@ const LoginScreen = () => {
           </Text>
         </TouchableOpacity>
       </View>
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
     </KeyboardAvoidingView>
   );
 };

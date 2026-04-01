@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
   TextInput,
   Modal,
 } from 'react-native';
@@ -19,6 +18,7 @@ import SharingService from '../services/sharingService';
 import { useAuth } from '../context/AuthContext';
 import colors from '../utils/colors';
 import { calculateVolume, getWeekWorkouts } from '../utils/stats';
+import AlertModal from '../components/AlertModal';
 
 const WorkoutsScreen = ({ navigation }) => {
   const [workouts, setWorkouts] = useState([]);
@@ -26,6 +26,9 @@ const WorkoutsScreen = ({ navigation }) => {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [shareCode, setShareCode] = useState('');
   const { user, logout } = useAuth();
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
 
   useEffect(() => {
     // Carica i workout dal cloud e poi dal local storage
@@ -72,45 +75,29 @@ const WorkoutsScreen = ({ navigation }) => {
   };
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined' && window.confirm) {
-      // Web: usa window.confirm
-      if (window.confirm('Sei sicuro di voler uscire?')) {
-        logout();
-      }
-    } else {
-      // Mobile: usa Alert
-      Alert.alert('Esci', 'Sei sicuro di voler uscire?', [
-        { text: 'Annulla', style: 'cancel' },
-        { text: 'Esci', style: 'destructive', onPress: logout },
-      ]);
-    }
+    showPopup('Esci', 'Sei sicuro di voler uscire?', [
+      { text: 'Annulla', style: 'cancel' },
+      { text: 'Esci', style: 'destructive', onPress: logout },
+    ]);
   };
 
   const handleImport = async () => {
     if (!shareCode.trim()) {
-      Alert.alert('Errore', 'Inserisci un codice di condivisione');
+      showPopup('Errore', 'Inserisci un codice di condivisione');
       return;
     }
 
     const result = await SharingService.importWorkout(shareCode.trim());
 
     if (result.success) {
-      // Aggiorna i templates dal cloud così la home si aggiorna subito
       await SupabaseStorage.loadTemplates();
       setImportModalVisible(false);
       setShareCode('');
-      Alert.alert(
-        'Successo!',
-        'Allenamento importato con successo!',
-        [
-          {
-            text: 'OK',
-            onPress: () => loadWorkouts(),
-          },
-        ]
-      );
+      showPopup('Successo!', 'Allenamento importato con successo!', [
+        { text: 'OK', onPress: () => loadWorkouts() },
+      ]);
     } else {
-      Alert.alert('Errore', result.error || 'Codice non valido');
+      showPopup('Errore', result.error || 'Codice non valido');
     }
   };
 
@@ -262,6 +249,7 @@ const WorkoutsScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
     </View>
   );
 };

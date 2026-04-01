@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +13,7 @@ import { CommonActions } from '@react-navigation/native';
 import Storage from '../services/storage';
 import SupabaseStorage from '../services/supabaseStorage';
 import colors from '../utils/colors';
+import AlertModal from '../components/AlertModal';
 
 const EditWorkoutScreen = ({ route, navigation }) => {
   const { workout: initialWorkout } = route.params;
@@ -33,6 +33,9 @@ const EditWorkoutScreen = ({ route, navigation }) => {
     }))
   );
   const [availableExercises, setAvailableExercises] = useState([]);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
 
   useEffect(() => {
     loadData();
@@ -45,7 +48,7 @@ const EditWorkoutScreen = ({ route, navigation }) => {
 
   const addExercise = () => {
     if (availableExercises.length === 0) {
-      Alert.alert('Errore', 'Crea prima degli esercizi nella sezione Esercizi');
+      showPopup('Errore', 'Crea prima degli esercizi nella sezione Esercizi');
       return;
     }
     setExercises([
@@ -92,12 +95,12 @@ const EditWorkoutScreen = ({ route, navigation }) => {
 
   const saveWorkout = async () => {
     if (!workoutName.trim()) {
-      Alert.alert('Errore', 'Inserisci un nome per l\'allenamento');
+      showPopup('Errore', "Inserisci un nome per l'allenamento");
       return;
     }
 
     if (exercises.length === 0) {
-      Alert.alert('Errore', 'Aggiungi almeno un esercizio');
+      showPopup('Errore', 'Aggiungi almeno un esercizio');
       return;
     }
 
@@ -131,18 +134,18 @@ const EditWorkoutScreen = ({ route, navigation }) => {
       await SupabaseStorage.syncTemplates();
     }
 
-    Alert.alert('Successo', 'Allenamento modificato!');
-    
-    // Resetta lo stack rimuovendo EditWorkout e aggiornando WorkoutDetail
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 1,
-        routes: [
-          { name: 'Home' },
-          { name: 'WorkoutDetail', params: { workout: updatedWorkout } },
-        ],
-      })
-    );
+    showPopup('Successo', 'Allenamento modificato!', [{
+      text: 'OK',
+      onPress: () => navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [
+            { name: 'Home' },
+            { name: 'WorkoutDetail', params: { workout: updatedWorkout } },
+          ],
+        })
+      ),
+    }]);
   };
 
   return (
@@ -193,7 +196,7 @@ const EditWorkoutScreen = ({ route, navigation }) => {
                     <Text style={styles.exerciseName}>
                       {selectedExercise?.name || 'Seleziona esercizio'}
                     </Text>
-                    {selectedExercise?.notes && (
+                    {!!selectedExercise?.notes && (
                       <Text style={styles.exerciseNotes}>{selectedExercise.notes}</Text>
                     )}
                   </View>
@@ -284,6 +287,7 @@ const EditWorkoutScreen = ({ route, navigation }) => {
           <Text style={styles.saveButtonText}>Salva Modifiche</Text>
         </TouchableOpacity>
       </View>
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
     </ScrollView>
   );
 };

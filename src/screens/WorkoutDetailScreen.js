@@ -5,8 +5,8 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
+  Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,16 +16,24 @@ import Storage from '../services/storage';
 import SupabaseStorage from '../services/supabaseStorage';
 import SharingService from '../services/sharingService';
 import Timer from '../components/Timer';
+import AlertModal from '../components/AlertModal';
 
 const WorkoutDetailScreen = ({ route, navigation }) => {
   const [workout, setWorkout] = useState(route.params.workout);
   const [currentTimer, setCurrentTimer] = useState(null);
   const [workoutInProgress, setWorkoutInProgress] = useState(false);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
   const [workoutStartTime, setWorkoutStartTime] = useState(null);
   const [workoutDuration, setWorkoutDuration] = useState(0);
-  // Inline editing state
-  const [editingCell, setEditingCell] = useState({ exIndex: null, setIndex: null, field: null });
-  const [editingValue, setEditingValue] = useState('');
+  // Always-current workout ref — avoids stale closures in async callbacks
+  const workoutRef = useRef(workout);
+  workoutRef.current = workout;
+  const workoutStartTimeRef = useRef(workoutStartTime);
+  workoutStartTimeRef.current = workoutStartTime;
+  const workoutInProgressRef = useRef(workoutInProgress);
+  workoutInProgressRef.current = workoutInProgress;
   const setRowRefs = useRef({});
   const exerciseCardRefs = useRef({});
 
@@ -71,46 +79,56 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
 
   // Segna la serie come completata e fa partire il timer
   const toggleSetCompleted = async (exIndex, setIndex) => {
-    const updatedWorkout = { ...workout };
+    const latest = workoutRef.current;
+    const updatedWorkout = {
+      ...latest,
+      exercises: latest.exercises.map((ex, eIdx) => {
+        if (eIdx !== exIndex) return ex;
+        return {
+          ...ex,
+          sets: ex.sets.map((s, sIdx) => {
+            if (sIdx !== setIndex) return s;
+            return { ...s, completed: !s.completed };
+          }),
+        };
+      }),
+    };
     const set = updatedWorkout.exercises[exIndex].sets[setIndex];
-    set.completed = !set.completed;
-    
+
+    workoutRef.current = updatedWorkout;
+    setWorkout(updatedWorkout);
+
     // Se la serie viene marcata come completata e l'allenamento non è ancora iniziato, avvialo
     if (set.completed && !workoutInProgress) {
       const startTime = Date.now();
       setWorkoutInProgress(true);
       setWorkoutStartTime(startTime);
       setWorkoutDuration(0);
-      
-      // Salva lo stato dell'allenamento attivo
       await Storage.saveActiveWorkout({
-        workoutId: workout.id,
+        workoutId: updatedWorkout.id,
         workout: updatedWorkout,
         startTime: startTime,
       });
     } else if (workoutInProgress) {
-      // Aggiorna l'allenamento attivo con le nuove serie completate
       await Storage.saveActiveWorkout({
-        workoutId: workout.id,
+        workoutId: updatedWorkout.id,
         workout: updatedWorkout,
         startTime: workoutStartTime,
       });
     }
-    
-    setWorkout({ ...updatedWorkout });
+
     // Salva nel calendario se completato, altrimenti aggiorna il template
-    if (workout.completedAt) {
+    if (updatedWorkout.completedAt) {
       const calendar = await Storage.getCalendar();
-      const index = calendar.findIndex((w) => w.id === workout.id);
+      const index = calendar.findIndex((w) => w.id === updatedWorkout.id);
       if (index !== -1) {
         calendar[index] = updatedWorkout;
         await Storage.saveCalendar(calendar);
         await SupabaseStorage.syncCalendar();
       }
     } else {
-      // Aggiorna il template locale
       const templates = await Storage.getTemplates();
-      const idx = templates.findIndex((t) => t.id === workout.id);
+      const idx = templates.findIndex((t) => t.id === updatedWorkout.id);
       if (idx !== -1) {
         templates[idx] = updatedWorkout;
         await Storage.saveTemplates(templates);
@@ -124,50 +142,45 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   };
 
   // Start inline editing
-  const startInlineEdit = (exIndex, setIndex, field, value) => {
-    setEditingCell({ exIndex, setIndex, field });
-    setEditingValue(value?.toString() || '');
+  const updateSetField = (exIndex, setIndex, field, rawValue) => {
+    const latest = workoutRef.current;
+    const updated = {
+      ...latest,
+      exercises: latest.exercises.map((ex, eIdx) => {
+        if (eIdx !== exIndex) return ex;
+        return {
+          ...ex,
+          sets: ex.sets.map((s, sIdx) => {
+            if (sIdx !== setIndex) return s;
+            const updatedSet = { ...s };
+            if (field === 'reps') updatedSet.reps = rawValue === '' ? '' : (parseInt(rawValue) || 0);
+            if (field === 'weight') updatedSet.weight = rawValue === '' ? '' : (parseFloat(rawValue) || 0);
+            if (field === 'time') updatedSet.time = rawValue === '' ? '' : (parseInt(rawValue) || 0);
+            return updatedSet;
+          }),
+        };
+      }),
+    };
+    workoutRef.current = updated;
+    setWorkout(updated);
   };
 
-  // Save inline edit
-  const saveInlineEdit = async () => {
-    const { exIndex, setIndex, field } = editingCell;
-    if (exIndex === null || setIndex === null || !field) return;
-    const updatedWorkout = { ...workout };
-    const set = updatedWorkout.exercises[exIndex].sets[setIndex];
-    if (field === 'reps') set.reps = parseInt(editingValue) || 0;
-    if (field === 'weight') set.weight = parseFloat(editingValue) || 0;
-    if (field === 'time') set.time = parseInt(editingValue) || 0;
-    setWorkout({ ...updatedWorkout });
-    setEditingCell({ exIndex: null, setIndex: null, field: null });
-    setEditingValue('');
-    
-    // Se l'allenamento è in corso, aggiorna lo stato salvato
-    if (workoutInProgress) {
+  const syncWorkoutToStorage = async () => {
+    const latest = workoutRef.current;
+    if (workoutInProgressRef.current) {
       await Storage.saveActiveWorkout({
-        workoutId: workout.id,
-        workout: updatedWorkout,
-        startTime: workoutStartTime,
+        workoutId: latest.id,
+        workout: latest,
+        startTime: workoutStartTimeRef.current,
       });
     }
-    
-    // Salva nel calendario se completato, altrimenti aggiorna il template
-    if (workout.completedAt) {
-      const calendar = await Storage.getCalendar();
-      const index = calendar.findIndex((w) => w.id === workout.id);
-      if (index !== -1) {
-        calendar[index] = updatedWorkout;
-        await Storage.saveCalendar(calendar);
-        await SupabaseStorage.syncCalendar();
-      }
-    } else {
-      // Aggiorna il template locale con i nuovi valori ma resetta completed
+    if (!latest.completedAt) {
       const templates = await Storage.getTemplates();
-      const idx = templates.findIndex((t) => t.id === workout.id);
+      const idx = templates.findIndex((t) => t.id === latest.id);
       if (idx !== -1) {
         const templateToSave = {
-          ...updatedWorkout,
-          exercises: updatedWorkout.exercises.map((ex) => ({
+          ...latest,
+          exercises: latest.exercises.map((ex) => ({
             ...ex,
             sets: ex.sets.map((s) => ({
               reps: s.reps,
@@ -219,26 +232,53 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
       const result = await SharingService.shareWorkout(workout);
       
       if (result.success) {
-        // Copia il codice nella clipboard
         Clipboard.setString(result.shareCode);
-        
-        Alert.alert(
+        showPopup(
           'Codice Copiato!',
-          `Il codice "${result.shareCode}" è stato copiato negli appunti.\n\nCondividilo con un amico per permettergli di importare questo allenamento.`,
-          [{ text: 'OK' }]
+          `Il codice "${result.shareCode}" è stato copiato negli appunti.\n\nCondividilo con un amico per permettergli di importare questo allenamento.`
         );
       } else {
-        Alert.alert('Errore', result.error || 'Impossibile condividere l\'allenamento');
+        showPopup('Errore', result.error || "Impossibile condividere l'allenamento");
       }
     } catch (error) {
-      Alert.alert('Errore', 'Errore durante la condivisione');
+      showPopup('Errore', 'Errore durante la condivisione');
     }
   };
 
-  const startWorkout = () => {
+  const startWorkout = async () => {
+    const startTime = Date.now();
     setWorkoutInProgress(true);
-    setWorkoutStartTime(Date.now());
+    setWorkoutStartTime(startTime);
     setWorkoutDuration(0);
+    // Persist immediately so edits made right after start survive a reload
+    await Storage.saveActiveWorkout({
+      workoutId: workout.id,
+      workout,
+      startTime,
+    });
+  };
+
+  const stopWorkout = async () => {
+    await Storage.clearActiveWorkout();
+    setWorkoutInProgress(false);
+    setWorkoutStartTime(null);
+    setWorkoutDuration(0);
+    // Reset completed sets so the template stays clean
+    const resetWorkout = {
+      ...workout,
+      exercises: workout.exercises.map((ex) => ({
+        ...ex,
+        sets: ex.sets.map((s) => ({ ...s, completed: false })),
+      })),
+    };
+    setWorkout(resetWorkout);
+  };
+
+  const handleStopPress = () => {
+    showPopup('Termina Allenamento', 'Vuoi salvare questo allenamento nel calendario?', [
+      { text: 'Non Salvare', style: 'destructive', onPress: stopWorkout },
+      { text: 'Salva', onPress: finishWorkout },
+    ]);
   };
 
   const finishWorkout = async () => {
@@ -288,10 +328,9 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     // Cancella l'allenamento attivo dallo storage
     await Storage.clearActiveWorkout();
 
-    Alert.alert(
+    showPopup(
       'Allenamento Completato!',
-      `Durata: ${formatDuration(workoutDuration)}\n\nL'allenamento è stato salvato nel calendario.`,
-      [{ text: 'OK' }]
+      `Durata: ${formatDuration(workoutDuration)}\n\nL'allenamento è stato salvato nel calendario.`
     );
   };
 
@@ -331,7 +370,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-          {workout.notes && (
+          {!!workout.notes && (
             <View style={styles.notesCard}>
               <Text style={styles.notesLabel}>Note:</Text>
               <Text style={styles.notesText}>{workout.notes}</Text>
@@ -417,69 +456,42 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
                           </View>
                         )}
                       </TouchableOpacity>
-                      {/* Inline editable reps */}
-                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'reps' ? (
+                      {/* Reps */}
+                      <View style={styles.setCell}>
                         <TextInput
-                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
-                          value={editingValue}
-                          onChangeText={setEditingValue}
+                          style={styles.setCellInput}
+                          value={set.reps !== undefined && set.reps !== null ? String(set.reps) : ''}
+                          onChangeText={(v) => updateSetField(exIndex, setIndex, 'reps', v)}
+                          onBlur={syncWorkoutToStorage}
                           keyboardType="numeric"
-                          autoFocus
-                          onBlur={saveInlineEdit}
-                          onSubmitEditing={saveInlineEdit}
                           returnKeyType="done"
+                          selectTextOnFocus
                         />
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.setCell, styles.setCellText]}
-                          onPress={() => startInlineEdit(exIndex, setIndex, 'reps', set.reps)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.setCellText}>{set.reps !== undefined && set.reps !== null ? String(set.reps) : ''}</Text>
-                        </TouchableOpacity>
-                      )}
-                      {/* Inline editable weight */}
-                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'weight' ? (
+                      </View>
+                      {/* Peso */}
+                      <View style={styles.setCell}>
                         <TextInput
-                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
-                          value={editingValue}
-                          onChangeText={setEditingValue}
+                          style={styles.setCellInput}
+                          value={set.weight !== undefined && set.weight !== null ? String(set.weight) : ''}
+                          onChangeText={(v) => updateSetField(exIndex, setIndex, 'weight', v)}
+                          onBlur={syncWorkoutToStorage}
                           keyboardType="decimal-pad"
-                          autoFocus
-                          onBlur={saveInlineEdit}
-                          onSubmitEditing={saveInlineEdit}
                           returnKeyType="done"
+                          selectTextOnFocus
                         />
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.setCell, styles.setCellText]}
-                          onPress={() => startInlineEdit(exIndex, setIndex, 'weight', set.weight)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.setCellText}>{set.weight !== undefined && set.weight !== null ? String(set.weight) + ' kg' : ''}</Text>
-                        </TouchableOpacity>
-                      )}
-                      {/* Inline editable time */}
-                      {editingCell.exIndex === exIndex && editingCell.setIndex === setIndex && editingCell.field === 'time' ? (
+                      </View>
+                      {/* Tempo */}
+                      <View style={styles.setCell}>
                         <TextInput
-                          style={[styles.setCell, styles.setCellText, { backgroundColor: colors.surfaceLight, borderRadius: 8, borderWidth: 1, borderColor: colors.primary, padding: 0, textAlign: 'center', fontSize: 16 }]}
-                          value={editingValue}
-                          onChangeText={setEditingValue}
+                          style={styles.setCellInput}
+                          value={set.time !== undefined && set.time !== null ? String(set.time) : ''}
+                          onChangeText={(v) => updateSetField(exIndex, setIndex, 'time', v)}
+                          onBlur={syncWorkoutToStorage}
                           keyboardType="numeric"
-                          autoFocus
-                          onBlur={saveInlineEdit}
-                          onSubmitEditing={saveInlineEdit}
                           returnKeyType="done"
+                          selectTextOnFocus
                         />
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.setCell, styles.setCellText]}
-                          onPress={() => startInlineEdit(exIndex, setIndex, 'time', set.time)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.setCellText}>{set.time !== undefined && set.time !== null ? String(set.time) : '-'}</Text>
-                        </TouchableOpacity>
-                      )}
+                      </View>
                     </View>
                   );
                 })}
@@ -491,11 +503,13 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
             {/* No modal: inline editing only */}
       </ScrollView>
 
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
+
       {/* Footer compatto */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.compactButton, workoutInProgress && styles.compactButtonActive]}
-          onPress={workoutInProgress ? finishWorkout : startWorkout}
+          onPress={workoutInProgress ? handleStopPress : startWorkout}
         >
           <Ionicons
             name={workoutInProgress ? "stop-circle" : "play-circle"}
@@ -637,13 +651,11 @@ const styles = StyleSheet.create({
   },
   setRow: {
     flexDirection: 'row',
-    paddingVertical: 12,
-    opacity: 0.5,
+    paddingVertical: 5,
     borderRadius: 8,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   setRowCompleted: {
-    opacity: 1,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
   },
   setCell: {
@@ -655,6 +667,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     textAlign: 'center',
+  },
+  setCellInput: {
+    color: colors.text,
+    fontSize: 12,
+    textAlign: 'center',
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 2,
+    width: '80%',
+    alignSelf: 'center',
   },
   setNumber: {
     width: 20,

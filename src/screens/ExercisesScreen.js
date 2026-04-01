@@ -7,7 +7,6 @@ import {
   FlatList,
   TextInput,
   Modal,
-  Alert,
   ScrollView,
   RefreshControl,
 } from 'react-native';
@@ -16,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import colors from '../utils/colors';
 import Storage from '../services/storage';
 import SupabaseStorage from '../services/supabaseStorage';
+import AlertModal from '../components/AlertModal';
 
 const ExercisesScreen = () => {
     const [user, setUser] = useState(null);
@@ -36,6 +36,9 @@ const ExercisesScreen = () => {
     notes: '',
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '', buttons: [] });
+  const showPopup = (title, message, buttons) => setPopup({ visible: true, title, message, buttons: buttons || [{ text: 'OK' }] });
+  const hidePopup = () => setPopup(p => ({ ...p, visible: false }));
 
   const categories = [
     'Tutte',
@@ -73,7 +76,7 @@ const ExercisesScreen = () => {
       }
     } catch (error) {
       console.error('Error loading exercises:', error);
-      Alert.alert('Errore', 'Impossibile caricare gli esercizi');
+      showPopup('Errore', 'Impossibile caricare gli esercizi');
     }
   };
 
@@ -119,7 +122,7 @@ const ExercisesScreen = () => {
 
   const handleAddExercise = async () => {
     if (!newExercise.name.trim()) {
-      Alert.alert('Errore', 'Inserisci il nome dell\'esercizio');
+      showPopup('Errore', "Inserisci il nome dell'esercizio");
       return;
     }
 
@@ -137,36 +140,31 @@ const ExercisesScreen = () => {
       await loadExercises();
       setShowAddModal(false);
       setNewExercise({ name: '', category: 'Petto', notes: '' });
-      Alert.alert('Successo', 'Esercizio aggiunto con successo!');
+      showPopup('Successo', 'Esercizio aggiunto con successo!');
     } catch (error) {
       console.error('Error adding exercise:', error);
-      Alert.alert('Errore', 'Impossibile aggiungere l\'esercizio');
+      showPopup('Errore', "Impossibile aggiungere l'esercizio");
     }
   };
 
-  const handleDeleteExercise = async (exerciseId) => {
-    Alert.alert(
-      'Conferma',
-      'Sei sicuro di voler eliminare questo esercizio?',
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updated = exercises.filter((ex) => ex.id !== exerciseId);
-              await SupabaseStorage.syncExercises();
-              await loadExercises();
-              Alert.alert('Successo', 'Esercizio eliminato');
-            } catch (error) {
-              console.error('Error deleting exercise:', error);
-              Alert.alert('Errore', 'Impossibile eliminare l\'esercizio');
-            }
-          },
+  const handleDeleteExercise = (exerciseId) => {
+    showPopup('Conferma', 'Sei sicuro di voler eliminare questo esercizio?', [
+      { text: 'Annulla', style: 'cancel' },
+      {
+        text: 'Elimina',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await SupabaseStorage.syncExercises();
+            await loadExercises();
+            showPopup('Successo', 'Esercizio eliminato');
+          } catch (error) {
+            console.error('Error deleting exercise:', error);
+            showPopup('Errore', "Impossibile eliminare l'esercizio");
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const renderExercise = ({ item }) => (
@@ -357,6 +355,7 @@ const ExercisesScreen = () => {
           </View>
         </View>
       </Modal>
+      <AlertModal visible={popup.visible} title={popup.title} message={popup.message} buttons={popup.buttons} onDismiss={hidePopup} />
     </View>
   );
 };
