@@ -164,7 +164,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     }
     // Timer
     if (set.completed) {
-      const restTime = set.rest && set.rest > 0 ? set.rest : 90;
+      const restTime = set.time && set.time > 0 ? set.time : 90;
       setCurrentTimer(restTime);
     }
   };
@@ -517,7 +517,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
                       <View style={styles.setCell}>
                         <TextInput
                           style={styles.setCellInput}
-                          value={set.time !== undefined && set.time !== null ? String(set.time) : ''}
+                          value={set.time !== undefined && set.time !== null ? String(set.time) : '90'}
                           onChangeText={(v) => updateSetField(exIndex, setIndex, 'time', v)}
                           onBlur={syncWorkoutToStorage}
                           keyboardType="numeric"
