@@ -77,7 +77,31 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     };
   }, [workoutInProgress, workoutStartTime]);
 
+  const playBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const count = 5;
+      const beepDuration = 0.18;
+      const gap = 0.1;
+      for (let i = 0; i < count; i++) {
+        const start = ctx.currentTime + i * (beepDuration + gap);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, start);
+        gain.gain.setValueAtTime(0.3, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + beepDuration);
+        osc.start(start);
+        osc.stop(start + beepDuration);
+      }
+    } catch (_) {}
+  };
+
   // Segna la serie come completata e fa partire il timer
+  const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);
   const toggleSetCompleted = async (exIndex, setIndex) => {
     const latest = workoutRef.current;
     const updatedWorkout = {
@@ -97,6 +121,10 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
 
     workoutRef.current = updatedWorkout;
     setWorkout(updatedWorkout);
+    // Restore scroll position after re-render
+    setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollTo({ y: scrollYRef.current, animated: false });
+    }, 0);
 
     // Se la serie viene marcata come completata e l'allenamento non è ancora iniziato, avvialo
     if (set.completed && !workoutInProgress) {
@@ -357,7 +385,12 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
+      >
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{workout.name}</Text>
@@ -402,7 +435,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
         <View style={styles.timerContainer}>
           <Timer
             initialSeconds={currentTimer}
-            onComplete={() => setCurrentTimer(null)}
+            onComplete={() => { setCurrentTimer(null); playBeep(); }}
             onStop={() => setCurrentTimer(null)}
           />
         </View>
