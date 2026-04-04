@@ -77,25 +77,36 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     };
   }, [workoutInProgress, workoutStartTime]);
 
+  const audioCtxRef = useRef(null);
+
+  const ensureAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtxRef.current;
+  };
+
   const playBeep = () => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const count = 5;
-      const beepDuration = 0.18;
-      const gap = 0.1;
-      for (let i = 0; i < count; i++) {
-        const start = ctx.currentTime + i * (beepDuration + gap);
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, start);
-        gain.gain.setValueAtTime(0.3, start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + beepDuration);
-        osc.start(start);
-        osc.stop(start + beepDuration);
-      }
+      const ctx = ensureAudioCtx();
+      ctx.resume().then(() => {
+        const count = 5;
+        const beepDuration = 0.18;
+        const gap = 0.1;
+        for (let i = 0; i < count; i++) {
+          const start = ctx.currentTime + i * (beepDuration + gap);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, start);
+          gain.gain.setValueAtTime(0.3, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + beepDuration);
+          osc.start(start);
+          osc.stop(start + beepDuration);
+        }
+      });
     } catch (_) {}
   };
 
@@ -103,6 +114,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   const scrollRef = useRef(null);
   const scrollYRef = useRef(0);
   const toggleSetCompleted = async (exIndex, setIndex) => {
+    ensureAudioCtx(); // unlock AudioContext during user gesture for iOS
     const latest = workoutRef.current;
     const updatedWorkout = {
       ...latest,
@@ -273,11 +285,31 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     }
   };
 
+  const wakeLockRef = useRef(null);
+
+  const acquireWakeLock = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.wakeLock) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      }
+    } catch (_) {}
+  };
+
+  const releaseWakeLock = () => {
+    try {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    } catch (_) {}
+  };
+
   const startWorkout = async () => {
     const startTime = Date.now();
     setWorkoutInProgress(true);
     setWorkoutStartTime(startTime);
     setWorkoutDuration(0);
+    acquireWakeLock();
     // Persist immediately so edits made right after start survive a reload
     await Storage.saveActiveWorkout({
       workoutId: workout.id,
@@ -287,6 +319,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   };
 
   const stopWorkout = async () => {
+    releaseWakeLock();
     await Storage.clearActiveWorkout();
     setWorkoutInProgress(false);
     setWorkoutStartTime(null);
@@ -310,6 +343,7 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   };
 
   const finishWorkout = async () => {
+    releaseWakeLock();
     const now = new Date();
     const dateOnly = now.toISOString().split('T')[0]; // Formato: YYYY-MM-DD
     
@@ -432,13 +466,15 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
       </View>
 
      {typeof currentTimer === 'number' && (
-        <View style={styles.timerContainer}>
-          <Timer
-            initialSeconds={currentTimer}
-            onComplete={() => { setCurrentTimer(null); playBeep(); }}
-            onStop={() => setCurrentTimer(null)}
-          />
-        </View>
+        <Modal visible={true} transparent animationType="fade">
+          <View style={styles.timerOverlay}>
+            <Timer
+              initialSeconds={currentTimer}
+              onComplete={() => { setCurrentTimer(null); playBeep(); }}
+              onStop={() => setCurrentTimer(null)}
+            />
+          </View>
+        </Modal>
       )}
 
       <View style={styles.exercisesList}>
@@ -631,10 +667,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  timerContainer: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  timerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   exercisesList: {
     padding: 16,
