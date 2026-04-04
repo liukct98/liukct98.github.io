@@ -407,9 +407,6 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
           <View style={styles.titleRow}>
             <Text style={styles.title}>{workout.name}</Text>
             <View style={styles.headerButtons}>
-              <TouchableOpacity onPress={() => navigation.navigate('EditWorkout', { workout })} style={styles.iconButton}>
-                <Ionicons name="pencil" size={24} color={colors.white} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={handleShare} style={styles.iconButton}>
                 <Ionicons name="share-social" size={24} color={colors.white} />
               </TouchableOpacity>
