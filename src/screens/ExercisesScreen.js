@@ -136,6 +136,7 @@ const ExercisesScreen = () => {
       };
 
       const updated = [...exercises, exercise];
+      await Storage.saveExercises(updated);
       await SupabaseStorage.syncExercises();
       await loadExercises();
       setShowAddModal(false);
@@ -155,6 +156,8 @@ const ExercisesScreen = () => {
         style: 'destructive',
         onPress: async () => {
           try {
+            const updated = exercises.filter((e) => e.id !== exerciseId);
+            await Storage.saveExercises(updated);
             await SupabaseStorage.syncExercises();
             await loadExercises();
             showPopup('Successo', 'Esercizio eliminato');

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import colors from '../utils/colors';
 import { calculateVolume } from '../utils/stats';
 import Storage from '../services/storage';
+import NoSleep from 'nosleep.js';
 import SupabaseStorage from '../services/supabaseStorage';
 import SharingService from '../services/sharingService';
 import Timer from '../components/Timer';
@@ -285,22 +286,18 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const wakeLockRef = useRef(null);
+  const noSleepRef = useRef(null);
 
-  const acquireWakeLock = async () => {
+  const acquireWakeLock = () => {
     try {
-      if (typeof navigator !== 'undefined' && navigator.wakeLock) {
-        wakeLockRef.current = await navigator.wakeLock.request('screen');
-      }
+      if (!noSleepRef.current) noSleepRef.current = new NoSleep();
+      noSleepRef.current.enable();
     } catch (_) {}
   };
 
   const releaseWakeLock = () => {
     try {
-      if (wakeLockRef.current) {
-        wakeLockRef.current.release();
-        wakeLockRef.current = null;
-      }
+      if (noSleepRef.current) noSleepRef.current.disable();
     } catch (_) {}
   };
 
