@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 import colors from '../utils/colors';
 import { calculateVolume } from '../utils/stats';
 import Storage from '../services/storage';
-import NoSleep from 'nosleep.js';
 import SupabaseStorage from '../services/supabaseStorage';
 import SharingService from '../services/sharingService';
 import Timer from '../components/Timer';
@@ -286,27 +285,11 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const noSleepRef = useRef(null);
-
-  const acquireWakeLock = () => {
-    try {
-      if (!noSleepRef.current) noSleepRef.current = new NoSleep();
-      noSleepRef.current.enable();
-    } catch (_) {}
-  };
-
-  const releaseWakeLock = () => {
-    try {
-      if (noSleepRef.current) noSleepRef.current.disable();
-    } catch (_) {}
-  };
-
   const startWorkout = async () => {
     const startTime = Date.now();
     setWorkoutInProgress(true);
     setWorkoutStartTime(startTime);
     setWorkoutDuration(0);
-    acquireWakeLock();
     // Persist immediately so edits made right after start survive a reload
     await Storage.saveActiveWorkout({
       workoutId: workout.id,
@@ -316,7 +299,6 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   };
 
   const stopWorkout = async () => {
-    releaseWakeLock();
     await Storage.clearActiveWorkout();
     setWorkoutInProgress(false);
     setWorkoutStartTime(null);
@@ -340,7 +322,6 @@ const WorkoutDetailScreen = ({ route, navigation }) => {
   };
 
   const finishWorkout = async () => {
-    releaseWakeLock();
     const now = new Date();
     const dateOnly = now.toISOString().split('T')[0]; // Formato: YYYY-MM-DD
     
